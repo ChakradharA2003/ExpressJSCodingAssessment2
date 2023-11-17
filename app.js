@@ -80,13 +80,55 @@ const authenticate = (request, response, next) => {
         response.status(401);
         response.send("Invalid JWT Token");
       } else {
-        request.username = username;
+        request.username = payload;
         next();
       }
     });
   }
 };
 
+//API 3
 app.get("/user/tweets/feed/", authenticate, async (request, response) => {
-  const dbQuery = `SELECT username,tweet,date_time FROM user INNER JOIN tweet ON user.user_id=tweet.user_id AS T INNER JOIN follower ON T.user_id=follower.following_user_id WHERE username.user='${username}' ORDER BY DESC LIMIT 4;`;
+  const { username } = request;
+  const dbQuery = `SELECT username,tweet,date_time FROM user INNER JOIN tweet ON user.user_id=tweet.user_id WHERE tweet.user_id = (SELECT following_user_id FROM follower WHERE follower_user_id = (SELECT user_id FROM user WHERE username='${username}')) ORDER BY tweet.date_time DESC LIMIT 4 OFFSET 0;`;
+  const dbResponse = await db.all(dbQuery);
+  response.send(dbResponse);
+});
+
+//API 4
+app.get("/user/following/", authenticate, async (request, response) => {
+  let { username } = request;
+  console.log(username);
+  const dbQuery = `SELECT username FROM user WHERE user_id = (SELECT following_user_id FROM follower WHERE follower_user_id= (SELECT user_id FROM user WHERE username='${username}'));`;
+  const dbResponse = await db.all(dbQuery);
+  response.send(dbResponse);
+});
+
+//API 5
+app.get("/user/followers/", authenticate, async (request, response) => {
+  let { username } = request;
+  const dbQuery = `SELECT username FROM user WHERE user_id = (SELECT follower_user_id FROM follower WHERE following_user_id= (SELECT user_id FROM user WHERE username='${username}'));`;
+  const dbResponse = await db.all(dbQuery);
+  response.send(dbResponse);
+});
+
+//API 6
+app.get("/tweets/:tweetId/", authenticate, async (request, response) => {
+  const { tweetId } = request.params;
+  const { username } = request;
+  const dbQuery = `SELECT tweet,COUNT(like_id) AS likes,COUNT(reply_id) AS replies,date_time FROM tweet INNER JOIN like ON tweet.user_id=like.user_id INNER JOIN reply ON tweet.user_id=reply.user_id WHERE tweet.tweet_id=${tweetId} AND tweet.user_id=(SELECT following_user_id FROM follower WHERE follower_user_id=(SELECT user_id FROm user WHERE username='${username}'));`;
+  const dbResponse = await db.get(dbQuery);
+  if (dbResponse === undefined) {
+    response.status(401);
+    response.send("Invalid Request");
+  } else {
+    response.send(dbResponse);
+  }
+});
+
+//API 7
+app.get('/tweets/:tweetId/likes/',authenticate,async(request,response)=>{
+    const {tweetId} = request.params;
+    const {username} = request;
+    const dbQuery = `SELECT username FROM user WHERE user_id = (SELECT user_id FROM like WHERE user_id = (SELECT following_user_id FROM follower WHERE follower_user_id = (SELECT user_id FROM user WHERE username = '${username}')));`
 });
